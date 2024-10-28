@@ -1,0 +1,83 @@
+---
+title: "Data Challenge 3"
+format: html
+editor: visual
+---
+
+```{r}
+# makes sure errors don't get produced
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+# load all libraries
+library(readr)
+library(tidyverse)
+library(knitr)
+library(Hmisc)
+# load dataset from github
+coffee_ratings <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-07-07/coffee_ratings.csv')
+```
+
+## Problem 1
+
+```{r}
+mean_sd <- function(vect) {
+  return(paste0(
+    round(mean(vect, na.rm = TRUE), 3), # calculate mean
+    " +/- ", 
+    round(sd(vect, na.rm = TRUE), 3) # calculate standard deviation
+  ))
+}
+
+table_format <- function(input_data, grouping) {
+  tab <- input_data %>%
+    group_by({{grouping}}) %>% # group by the given grouping
+    summarise(across(aroma:moisture, ~ mean_sd(.), .names = "{.col} mean +/- sd")) %>% # specifies the columns, applies the function, gives the columns names
+    kable()
+  
+  return(tab) # table is returned
+}
+
+coffee_ratings <- coffee_ratings %>%
+  mutate(altitude_mean_meters = as.numeric(altitude_mean_meters)) %>%  # Convert to numeric
+  mutate(altitude_mean_meters = ifelse(altitude_mean_meters < 0, NA, altitude_mean_meters)) %>% # negative values are turned to NA
+  mutate(altitude_mean_meters = ifelse(altitude_mean_meters > 5000, NA, altitude_mean_meters)) %>% # values greater than 5000 are turned to NA because they were not binning correctly
+  mutate(binned_altitude = cut2(altitude_mean_meters, 
+          cuts = seq(0, 5000, by = 500))) # created into bins by 500
+replace_na_with_missing <- function(data, columns) {
+  for (col in columns) {
+    if (col %in% names(data)) {
+      data[[col]] <- as.character(data[[col]]) # converts column into character
+      data[[col]][is.na(data[[col]])] <- "Missing" # turns NA into Missing
+    }
+  }
+  return(data)  # Return the modified dataframe
+}
+
+# Usage
+coffee_ratings <- replace_na_with_missing(coffee_ratings, c("altitude_mean_meters", "binned_altitude")) # function is applied to replaces NAs with missing
+t1 <- map(c("species", "country_of_origin", "binned_altitude"), ~table_format(coffee_ratings, !!sym(.x))) # makes the 3 tables
+t1[[1]] # species
+t1[[2]] # country of origin
+t1[[3]] # binned altitude
+```
+
+## Problem 2
+
+```{r}
+scatterplot_function <- function(df, x, y, group) {
+  coffee_ratings %>% 
+    select(x, y, group) %>% # selects the columns
+    drop_na() %>% # drops the NA values
+    ggplot(aes_string(x, y, color = group)) + # scatterplot
+    geom_jitter() + # data points plotted
+    theme_minimal() + # gets rid of grey background
+    labs(title = paste("Scatterplot of", y, "vs", x, "by", group)) # title for each plot
+}
+
+plot_params <- list(
+  x = c("aroma", "flavor"), # values
+  y = c("balance", "body"), # y values
+  group = c("species", "binned_altitude") # color values
+)
+plots <- pmap(plot_params, scatterplot_function) # plots the plots
+plots
+```
